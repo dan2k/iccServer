@@ -623,32 +623,28 @@ function saveComment(Request $request, Response $response){
 	$detail=$data['comment_detail'];
 	$ck=ckToken($token,$userId);
 	if($ck['status']){
-		try{
-			$db=getDB();
-			$db->exec("set names utf8");
-			$sql="
-			select if(max(comment_no) is null ,1,max(comment_no)+1) as `no` from ".DB.".mobile_comment where sv_no=:svNo
-			";
-			$stmt=$db->prepare($sql);
-			$stmt->bindParam('svNo',$msvNo,PDO::PARAM_STR);
-			$stmt->execute();
-			$rs= $stmt->fetchAll();
-			$no=$rs[0]['no'];
-			
-			$pno=sprintf('%07d',$no);
-			$db->exec("insert into ".DB.".mobile_comment(sv_no,comment_no,comment_uid,comment_utype,comment_detail,comment_adate,comment_atime) 
-				values('$msvNo','$no','$userId',1,'$detail',now(),now())");
+		$db=new DB();
+		$db->beginTransaction("เพิ่ม comment");
+		$sql= " select if(max(comment_no) is null ,1,max(comment_no)+1) as `no` from ".DB.".mobile_comment where sv_no=:svNo";
+		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
+		$no=$rs[0]['no'];
+		$pno=sprintf('%07d',$no);
+		$sql="insert into ".DB.".mobile_comment(sv_no,comment_no,comment_uid,comment_utype,comment_detail,comment_adate,comment_atime) 
+		values(?,?,?,1,?,now(),now())";
+		$arr=[$msvNo,$no,$userId,$detail];
+		$db->sqlexe($sql,$arr);
+		if($db->isOk()){
 			$arr=[
 				"status"=>true,
 				"msg"=>"Insert Ok",
 				"sv_no"=>$msvNo,
 				"comment_no"=>$no,
-				"pno"=>$pno
+				"pno"=>$pno	
 			];
-			
-		}catch(PDOException $e){
-			$arr=["status"=>false,"msg"=>$e->getMessage()];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
 		}
+		$db->endTransaction();
 	}else{
 		$arr=$ck;
 	}
@@ -657,7 +653,6 @@ function saveComment(Request $request, Response $response){
 	$response = $response->withStatus(201);
     $response = $response->withJson($arr);
     return $response;
-	
 };
 function confirmClose(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
