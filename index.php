@@ -563,10 +563,10 @@ function saveProblem(Request $request, Response $response){
 	$ptype=$data['msv_type'];
 	$ck=ckToken($token,$userId);
 	if($ck['status']){
-		try{
-			$db=getDB();
-			$db->exec("set names utf8");
-			$sql="
+		$userData=$ck['data'];
+		$db=new DB();
+		$db->beginTransaction("บันทึกการแจ้งปัญหา");
+		$sql="
 			select 
 				concat('0',p.section_id) as rg 
 			from 
@@ -576,34 +576,42 @@ function saveProblem(Request $request, Response $response){
 				p2.cust_ptype=:custPtype 
 				and p2.cust_pcode=:custPcode
 				and p2.cc=p.province_id 
-			";
-			$stmt=$db->prepare($sql);
-			$stmt->bindParam('custPtype',$custPtype,PDO::PARAM_STR);
-			$stmt->bindParam('custPcode',$custPcode,PDO::PARAM_STR);
-			$stmt->execute();
-			$rs= $stmt->fetchAll();
-			$rg=$rs[0]['rg'];
-			$yy=substr(date('Y')+543,2,2);
-			$sql="
-			select max(substr(msv_no,8,7))+1 as no from ".DB.".mobile_sv where msv_no like :prekey 
-			";
-			$prekey="MRG".$rg.$yy."%";
-			$stmt=$db->prepare($sql);
-			$stmt->bindParam('prekey',$prekey,PDO::PARAM_STR);
-			$stmt->execute();
-			$rs= $stmt->fetchAll();
-			$no=$rs[0]['no'];
-			$msvNo="MRG$rg$yy".sprintf('%07d',$no);
-			$db->exec("insert into ".DB.".mobile_sv(msv_no,msv_uid,msv_type,msv_detail,cust_ptype,cust_pcode,msv_adate,msv_atime,msv_status) values('$msvNo','$userId','$ptype','$msvDetail','$custPtype','$custPcode',now(),now(),0)");
+		";
+		$rs=$db->sqlexe($sql,['custPtype'=>$custPtype,'custPcode'=>$custPcode]);
+		$rg=$rs[0]['rg'];
+		$yy=substr(date('Y')+543,2,2);
+		
+		$prekey="MRG".$rg.$yy."%";
+		//msv_no
+		$sql="
+		select max(substr(msv_no,8,7))+1 as no from ".DB.".mobile_sv where msv_no like :prekey 
+		";
+		$rs=$db->sqlexe($sql,['prekey'=>$prekey]);
+		$no=$rs[0]['no'];
+		$msvNo="MRG$rg$yy".sprintf('%07d',$no);
+		$sql="insert into ".DB.".mobile_sv(msv_no,msv_uid,msv_type,msv_detail,cust_ptype,cust_pcode,msv_adate,msv_atime,msv_status)  values(?,?,?,?,?,?,now(),now(),0)";
+		$params=[$msvNo,$userId,$ptype,$msvDetail,$custPtype,$custPcode];
+		$db->sqlexe($sql,$params);
+		
+		//เก็บ ทราน ไว้ที่ sv_trans
+		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time) values(?,?,?,?,?,?,?,?,?,0,now(),now())";
+		$seq=1;//ทรานแรกสุด
+		$userType=1;
+		$kpid=$userData['job_id'];
+		$skpid=$userData['job_id'];
+		$rkpid=$userData['job_id'];
+		$params=[$msvNo,$seq,$userId,$userType,$kpid,$skpid,$rkpid,$custPtype,$custPcode];
+		$db->sqlexe($sql,$params);
+		if($db->isOk()){
 			$arr=[
 				"status"=>true,
 				"msg"=>"Insert Ok",
 				"msv_no"=>$msvNo
 			];
-			
-		}catch(PDOException $e){
-			$arr=["status"=>false,"msg"=>$e->getMessage()];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
 		}
+		$db->endTransaction();
 	}else{
 		$arr=$ck;
 	}
@@ -612,7 +620,6 @@ function saveProblem(Request $request, Response $response){
 	$response = $response->withStatus(201);
     $response = $response->withJson($arr);
     return $response;
-	
 };
 function saveComment(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
