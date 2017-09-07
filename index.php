@@ -189,6 +189,9 @@ function genPtype(Request $request, Response $response,$args){
 	echo "\n\r";
 	
 }
+
+
+
 /*
 function genPtype(Request $request, Response $response,$args){
 	$uType=$args['uType'];
