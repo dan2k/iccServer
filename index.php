@@ -629,9 +629,20 @@ function saveComment(Request $request, Response $response){
 		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
 		$no=$rs[0]['no'];
 		$pno=sprintf('%07d',$no);
-		$sql="insert into ".DB.".mobile_comment(sv_no,comment_no,comment_uid,comment_utype,comment_detail,comment_adate,comment_atime) 
-		values(?,?,?,1,?,now(),now())";
-		$arr=[$msvNo,$no,$userId,$detail];
+		$sql="insert into ".DB.".mobile_comment(sv_no,comment_no,comment_uid,comment_utype,comment_custptype,comment_custpcode,comment_detail,comment_adate,comment_atime) 
+		values(?,?,?,1,?,?,?,now(),now())";
+		$userData=$ck['data'];
+		$userType=$userData['user_type'];
+		$custptype=$userType==1?$userData['cust_ptype']:$userData['place_type'];
+		$custpcode=$userType==1?$userData['cust_pcode']:$userData['place_code'];
+		$arr=[
+			$msvNo,
+			$no,
+			$userId,
+			$custptype,
+			$custpcode,
+			$detail
+		];
 		$db->sqlexe($sql,$arr);
 		if($db->isOk()){
 			$arr=[
@@ -1026,7 +1037,6 @@ function ckToken($token,$uid){
 	}
 }
 function genToken($datax){
-	
 	$tokenId = base64_encode(mcrypt_create_iv(32));
 	$issuedAt   = time();
 	$notBefore  = $issuedAt + 10;  //Adding 10 seconds
@@ -1054,12 +1064,10 @@ function genToken($datax){
     //return "[{'status' : 'success','resp':".json_encode($unencodedArray)."}]";
 	//JWT::$leeway = 60;
 	//$decoded = JWT::decode($jwt, $key, array('HS256'));
-
 }
 function isExpire($exp){
 	$now=time();
 	return $exp<=$now;
 }
-
 
 ?>
