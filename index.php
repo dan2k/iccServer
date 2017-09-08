@@ -820,8 +820,10 @@ function getJob(Request $request, Response $response){
 		$params=null;
 		if($custPtype!=''){$params['custPtype']=$custPtype;}
 		if($custPcode!=''){$params['custPcode']=$custPcode;}
-		if($scope!=''){$params['scope']=$scope;}
+		if($cScope!=''){$params['scope']=$scope;}
+
 		$rs=$db->sqlexe($sql,$params);	
+
 		$sql="select 
 				sv.sv_no as msv_no
 				,case sv.problem_type
@@ -829,7 +831,7 @@ function getJob(Request $request, Response $response){
 					when 'P2' then 2
 					when 'P3' then 3
 				 end as msv_type
-				 ,(select concat(user_fname,' ',user_lname) from cen_user  where  user_id=sv.user_id and cust_ptype=:custPtype and user_rcode=:custPcode) as thiname
+				 ,(select concat(user_fname,' ',user_lname) from cen_user  where  user_id=sv.user_id and cust_ptype=sv.cust_ptype and user_rcode=sv.cust_pcode) as thiname
 				 ,sv.sv_date as msv_adate
 				 ,sv.sv_time as msv_atime
 				 ,sv.sv_detail as msv_detail
@@ -840,18 +842,19 @@ function getJob(Request $request, Response $response){
 
 				 
 			from 
-				sv_service sv
+				".DB.".sv_service sv,
+				".DB.".cen_cust_place p,
+				".DB.".cen_province pp
 			where
 				sv.msv_status in(0,1,3,5)
-				and sv.cust_ptype=:custPtype
-				and sv.cust_pcode=:custPcode
-				
-							";
-
-		$rs1=$db->sqlexe($sql,[
-			'custPtype'=>$custPtype,
-			'custPcode'=>$custPcode
-		]);
+				$cptype
+				$cpcode
+				and sv.cust_ptype=p.cust_ptype
+				and sv.cust_pcode=p.cust_pcode
+				and pp.province_id=p.cc
+				$cScope
+		";
+		$rs1=$db->sqlexe($sql,$params);
 		
 		if($db->isOk()){		
 			$rs=array_merge($rs,$rs1);
@@ -920,10 +923,7 @@ function getComment(Request $request, Response $response){
 		$sv=substr($msvNo,0,2);
 		if($sv=='RG'){
 			$sql="select msv_no from ".DB.".sv_service where  sv_no=:msvNo";
-			$stmt=$db->prepare($sql);
-			$stmt->bindParam('msvNo',$msvNo,PDO::PARAM_STR);
-			$stmt->execute();
-			$rs=$stmt->fetchAll();
+			$rs=$db->sqlexe($sql,['msvNo'=>$msvNo]);
 			$svno=$rs[0]['msv_no'];
 		}else{
 			$svno=$msvNo;
