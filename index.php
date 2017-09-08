@@ -40,6 +40,7 @@ $app->post('/getComment','getComment');
 $app->get('/isConnect','isConnect');
 $app->post('/getSvdata','getSvdata');
 $app->post('/confirmClose','confirmClose');
+$app->post('/close','close');
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -689,13 +690,13 @@ function confirmClose(Request $request, Response $response){
 		$db->beginTransaction('เริ่มทำ ยืนยันการปิดงาน');
 		$isMoi=substr($msvNo,0,1);	
 		$sql="select skp_id from ".DB.".sv_trans where sv_no=:svNo and seq=1";	
-		$rs=$db->sqlexe($sql,['svNo'=>$svNo]);
+		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
 		$skpid=$rs[0]['skp_id'];
 		$rkpid=$skpid;
 		$kpid=$skpid;
 		
 		$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
-		$rs=$db->sqlexe($sqlmax,['svNo'=>$svNo]);
+		$rs=$db->sqlexe($sqlmax,['svNo'=>$msvNo]);
 		$seq=$rs[0]['m']+1;
 		
 		$custptype=$isMoi=='M'?$user['cust_ptype']:$user['place_type'];
@@ -747,6 +748,103 @@ function confirmClose(Request $request, Response $response){
 		if($db->isOk()){
 			$arr=[
 				"status"=>true,
+				"msg"=>"close Job Ok"
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+		$db->endTransaction();
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+};
+function close(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$msvNo=$data['msv_no'];
+	$solve=$data['solve'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$user=$ck['data'];
+		$rate='';
+		$db=new DB();
+		$db->beginTransaction('เริ่มทำ ยืนยันการปิดงาน');
+		$isMoi=substr($msvNo,0,1);	
+		$sql="select skp_id,rkp_id from ".DB.".sv_trans where sv_no=:svNo and seq=1";	
+		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
+		$skpid=$rs[0]['skp_id'];
+		$rkpid=$rs[0]['rkp_id'];
+		
+		
+		$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
+		$rs=$db->sqlexe($sqlmax,['svNo'=>$msvNo]);
+		$seq=$rs[0]['m']+1;
+		
+		$custptype=$isMoi=='M'?$user['cust_ptype']:$user['place_type'];
+		$custpcode=$isMoi=='M'?$user['cust_pcode']:$user['place_code'];
+		$params['msvNo']=$msvNo;
+		$params['userId']=$userId;
+		$params['solve']=$solve;
+		if($isMoi=='M'){
+			$kpid=$user['job_id'];
+			$userType=1;
+			$sql="update ".DB.".mobile_sv set
+						msv_status='1',
+						msv_solve=:solve,
+						msv_udate=now(),
+						msv_utime=now(),
+						msv_updid=:userId
+					where 
+						msv_no=:msvNo	
+					";
+		}else{
+			$userType=2;
+			switch($user['place_type']){
+				case 'P':$kpid=3;break;
+				case 'R':$kpid=5;break;
+				default :$kpid=7;break;
+			}
+			$sql="update ".DB.".sv_service set
+						msv_status='1',
+						sv_solve_detail:solve,
+						sv_solve_date=now(),
+						sv_solve_time=now(),
+						sv_solve_emp=:userId,
+					where 
+						sv_no=:msvNo
+					
+			";
+			
+		}
+		$db->sqlexe($sql,$params);
+		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time)
+					values(:F1,:F2,:F3,:F4,:F5,:F6,:F7,:F8,:F9,:F10,:F11,:F12)
+				";
+		$db->sqlexe($sql,[
+				"F1"=>$msvNo,
+				"F2"=>$seq,
+				"F3"=>$userId,
+				"F4"=>$userType,
+				"F5"=>$kpid,
+				"F6"=>$skpid,
+				"F7"=>$rkpid,
+				"F8"=>$custptype,
+				"F9"=>$custpcode,
+				"F10"=>1,
+				"F11"=>date('Y-m-d'),
+				"F12"=>date('H:i:s')
+		]);
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
 				"msg"=>"close Job Ok",
 			];
 		}else{
@@ -763,7 +861,6 @@ function confirmClose(Request $request, Response $response){
     return $response;
 	
 };
-
 function getJob(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
