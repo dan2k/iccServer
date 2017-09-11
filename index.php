@@ -41,6 +41,8 @@ $app->get('/isConnect','isConnect');
 $app->post('/getSvdata','getSvdata');
 $app->post('/confirmClose','confirmClose');
 $app->post('/close','close');
+$app->post('/getWorktype','getWorktype');
+$app->post('/getEquipset','getEquipset');
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -124,7 +126,97 @@ function test(Request $request, Response $response){
 		echo json_encode($arr);
 		
 }
+function getWorktype(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$custPtype=$data['cust_ptype'];
+	$custPcode=$data['cust_pcode'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select 
+			wt.work_type_id
+			,wt.work_type_desc
+		from 
+			cen_cust_equip e,
+			cen_work_type wt
+		where 
+			e.cust_ptype=? 
+			and e.cust_pcode=?
+			and e.work_type_id <>0 
+			and e.work_type_id=wt.work_type_id
+		group by e.work_type_id
+		";
+		$rs= $db->sqlexe($sql,[$custPtype,$custPcode]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
 	
+}
+function getEquipset(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$custPtype=$data['cust_ptype'];
+	$custPcode=$data['cust_pcode'];
+	$workTypeId=$data['work_type_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select 
+			s.equip_set_id
+			,s.equip_set_desc
+		from 
+			cen_cust_equip e
+			,cen_contract c
+			,cen_equip_set s
+		where 
+			e.cust_ptype=?
+			and e.cust_pcode=?
+			and e.contract_no=c.contract_no
+			and c.contract_no_ext='N'
+			and c.contract_status=''
+			and e.work_type_id=?
+			and e.equip_set_id=s.equip_set_id
+		group by  e.equip_set_id
+		";
+		$rs= $db->sqlexe($sql,[$custPtype,$custPcode,$workTypeId]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}	
 function isConnect(Request $request,Response $response){
 	$arr=["status"=>true];
 	header('Content-type: text/html; charset=UTF-8');
@@ -191,151 +283,6 @@ function genPtype(Request $request, Response $response,$args){
 	
 }
 
-
-
-/*
-function genPtype(Request $request, Response $response,$args){
-	$uType=$args['uType'];
-	$scope=$args['scope'];
-	$pv=$args['pv'];
-	if($pv=='null'){
-		$pv='';
-	}
-	$scope=$scope=='null'?'':$scope;
-	try{
-		$db=getDB();
-		$db->exec("set names utf8");
-		if($uType=='P'){
-			$condi=" and a2.cc=:scope ";
-		}elseif($uType=='R'){
-			if($pv==''){
-				$condi=" and  a3.section_id=:scope ";
-			}else{
-				$scope=$pv;
-				$condi=" and  a2.cc=:scope ";
-			}
-		}else{
-			if($pv==''){
-				$condi="";
-			}else{
-				$scope=$pv;
-				$condi=" and  a2.cc=:scope ";
-			}
-		}
-		$sql="select 
-					a1.cust_ptype,
-					a1.cust_desc
-				from 
-					".DB.".cen_type_custptype a1,
-					".DB.".cen_cust_place a2,
-					".DB.".cen_province a3
-				where 
-					a1.cust_ptype=a2.cust_ptype
-					and a2.cc=a3.province_id
-					$condi
-					group by a1.cust_ptype;
-				";
-		$stmt=$db->prepare($sql);
-		if($condi!=""){
-			$stmt->bindParam('scope',$scope,PDO::PARAM_STR);
-		}
-		$stmt->execute();
-		$rs= $stmt->fetchAll(PDO::FETCH_ASSOC);
-		$arr=[
-			'status'=>true,
-			'data'=>$rs
-		];
-		
-	}catch(PDOException $e){
-		$arr=["status"=>false,"msg"=>$e->getMessage()];
-	}
-	header('Content-type: text/html; charset=UTF-8');
-	//print_r($arr);
-	echo json_encode($arr);
-	echo "\n\r";
-	echo "\n\r";
-	echo "\n\r";
-	echo "\n\r";
-	
-};
-*/
-
-
-/*function genPcode(Request $request, Response $response,$args){
-	//$token=$request->hasHeader('x-access-token');
-	$uType=$args['uType'];
-	$scope=$args['scope'];
-	$pv=$args['pv'];
-	$custptype=$args['custptype'];
-	if($pv=='null'){
-		$pv='';
-	}
-	$custptype=$custptype=='null'?'':$custptype;
-	try{
-		$db=getDB();
-		$db->exec("set names utf8");
-		if($uType=='P'){
-
-			$condi=" and cp.cc=:scope ";
-		}elseif($uType=='R'){
-
-			if($pv==''){
-
-				$condi=" and  p.section_id=:scope ";
-			}else{
-
-				$scope=$pv;
-				$condi=" and  cp.cc=:scope ";
-			}
-		}else{
-
-			if($pv==''){
-
-				$condi="";
-			}else{
-
-				$scope=$pv;
-				$condi=" and  cp.cc=:scope ";
-			}
-		}
-		
-		if($custptype!=''){
-			$condi .=" and cp.cust_ptype=:custptype ";
-		}
-
-		$sql="select 
-				cp.* 
-			from 
-				".DB.".cen_cust_place cp,
-				".DB.".cen_province p  
-			where 
-				cp.cc=p.province_id
-				$condi  
-			order by cp.cust_ptype,cp.cust_pcode";
-
-		$stmt=$db->prepare($sql);
-		if($condi!=""){
-			$stmt->bindParam('scope',$scope,PDO::PARAM_STR);
-		}
-		if($custptype!=""){
-			$stmt->bindParam('custptype',$custptype,PDO::PARAM_STR);
-		}
-		$stmt->execute();
-		$rs= $stmt->fetchAll(PDO::FETCH_ASSOC);
-		$arr=[
-			'status'=>true,
-			'data'=>$rs
-		];
-	}catch(PDOException $e){
-		$arr=["status"=>false,"msg"=>$e->getMessage()];
-	}
-	header('Content-type: text/html; charset=UTF-8');
-	//print_r($arr);
-	echo json_encode($arr);
-	echo "\n\r";
-	echo "\n\r";
-};
-*/
 function genPcode(Request $request, Response $response,$args){
 	$uType=$args['uType'];
 	$scope=$args['scope'];
@@ -630,6 +577,7 @@ function saveComment(Request $request, Response $response){
 	$token=$headers[0];
 	$data=$request->getParam('data');
 	$userId=$data['user_id'];
+	$userType=$data['user_type'];
 	$msvNo=$data['msv_no'];
 	$detail=$data['comment_detail'];
 	$ck=ckToken($token,$userId);
@@ -641,7 +589,7 @@ function saveComment(Request $request, Response $response){
 		$no=$rs[0]['no'];
 		$pno=sprintf('%07d',$no);
 		$sql="insert into ".DB.".mobile_comment(sv_no,comment_no,comment_uid,comment_utype,comment_custptype,comment_custpcode,comment_detail,comment_adate,comment_atime) 
-		values(?,?,?,1,?,?,?,now(),now())";
+		values(?,?,?,?,?,?,?,now(),now())";
 		$userData=$ck['data'];
 		$userType=$userData['user_type'];
 		$custptype=$userType==1?$userData['cust_ptype']:$userData['place_type'];
@@ -650,6 +598,7 @@ function saveComment(Request $request, Response $response){
 			$msvNo,
 			$no,
 			$userId,
+			$userType,
 			$custptype,
 			$custpcode,
 			$detail
