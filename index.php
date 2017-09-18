@@ -43,6 +43,8 @@ $app->post('/confirmClose','confirmClose');
 $app->post('/close','close');
 $app->post('/getWorktype','getWorktype');
 $app->post('/getEquipset','getEquipset');
+$app->post('/listEquip','listEquip');
+$app->post('/listSymptom','listSymptom');
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -105,10 +107,10 @@ function test(Request $request, Response $response){
 		
 		$db=new DB();
 		$db->beginTransaction("ทดสอบ");
-		$sql="select * from cen_province where province_id in(?,?,?)";
+		$sql="select * from ".DB.".cen_province where province_id in(?,?,?)";
 		$rs=$db->sqlexe($sql,[65,66,67]);
-		$db->sqlexe("update cen_province set section_id=6 where province_id=65");
-		$sql="select * from cen_province where section_id=:s1 and province_id in(:s2,:s3,:s4)";
+		$db->sqlexe("update ".DB.".cen_province set section_id=6 where province_id=65");
+		$sql="select * from ".DB.".cen_province where section_id=:s1 and province_id in(:s2,:s3,:s4)";
 		$rs=$db->sqlexe($sql,[
 			's1'=>6,
 			's2'=>65,
@@ -141,14 +143,15 @@ function getWorktype(Request $request, Response $response){
 			wt.work_type_id
 			,wt.work_type_desc
 		from 
-			cen_cust_equip e,
-			cen_work_type wt
+		".DB.".cen_cust_equip e,
+		".DB.".cen_work_type wt
 		where 
 			e.cust_ptype=? 
 			and e.cust_pcode=?
 			and e.work_type_id <>0 
 			and e.work_type_id=wt.work_type_id
 		group by e.work_type_id
+		order by wt.work_type_id
 		";
 		$rs= $db->sqlexe($sql,[$custPtype,$custPcode]);
 		if($db->isOk()){		
@@ -185,9 +188,9 @@ function getEquipset(Request $request, Response $response){
 			s.equip_set_id
 			,s.equip_set_desc
 		from 
-			cen_cust_equip e
-			,cen_contract c
-			,cen_equip_set s
+		".DB.".cen_cust_equip e
+			,".DB.".cen_contract c
+			,".DB.".cen_equip_set s
 		where 
 			e.cust_ptype=?
 			and e.cust_pcode=?
@@ -216,7 +219,98 @@ function getEquipset(Request $request, Response $response){
     $response = $response->withJson($arr);
     return $response;
 	
-}	
+}
+function listEquip(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$custPtype=$data['cust_ptype'];
+	$custPcode=$data['cust_pcode'];
+	$workTypeId=$data['work_type_id'];
+	$equipSetId=$data['equip_set_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select 
+			e.pno
+			,e.sno
+			,w.work_type_id
+			,w.work_type_desc
+			,e.equip_set_id
+			,s.equip_set_desc 
+			,e.equip_pair_id
+			,pno.pic
+		from 
+			".DB.".cen_cust_equip e
+			,".DB.".cen_work_type w
+			,".DB.".cen_contract c
+			,".DB.".cen_equip_set s
+			,".STOCK.".st_equip pno
+		where 
+			e.cust_ptype=?
+			and e.cust_pcode=?
+			and e.work_type_id=?
+			and e.equip_set_id=?
+			and e.pno=pno.pno
+			and e.work_type_id=w.work_type_id
+			and e.equip_set_id=s.equip_set_id
+			and e.contract_no=c.contract_no
+			and c.contract_no_ext='N'
+			and c.contract_status=''
+		order by e.pno;
+		";
+		$rs= $db->sqlexe($sql,[$custPtype,$custPcode,$workTypeId,$equipSetId]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}		
+function listSymptom(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$pno=$data['pno'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select s2.* from ".DB.".cen_problem_sub s,".DB.".cen_problem_sub2 s2 where s.problem_sub_desc=? and s.problem_sub_id=s2.problem_sub_id;
+		";
+		$rs= $db->sqlexe($sql,[$pno]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}		
 function isConnect(Request $request,Response $response){
 	$arr=["status"=>true];
 	header('Content-type: text/html; charset=UTF-8');

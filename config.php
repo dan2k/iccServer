@@ -1,6 +1,7 @@
 ﻿<?php
 define('SITE_KEY','it[[mepsicczjko,nv5nv');
 define('DB','mps_icc');
+define('STOCK','stock');
 define('DBHOST','localhost');
 define('DBUSER','root');
 define('DBPASS','');
@@ -43,7 +44,7 @@ class DB{
 			PDO::ATTR_ERRMODE       => PDO::ERRMODE_EXCEPTION
 			);
 		try{
-			$this->dbh = new PDO($dsn, $this->user, $this->pass, $options);
+			@$this->dbh = new PDO($dsn, $this->user, $this->pass, $options);
 			$this->setname();
 		}
 		//catch any errors
