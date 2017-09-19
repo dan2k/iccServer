@@ -45,6 +45,10 @@ $app->post('/getWorktype','getWorktype');
 $app->post('/getEquipset','getEquipset');
 $app->post('/listEquip','listEquip');
 $app->post('/listSymptom','listSymptom');
+$app->post('/getProblemsub','getProblemsub');
+$app->post('/genProblemsub2','genProblemsub2');
+$app->post('/genProblemgroup','genProblemgroup');
+$app->post('/genProblemsub','genProblemsub');
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -293,6 +297,129 @@ function listSymptom(Request $request, Response $response){
 		select s2.* from ".DB.".cen_problem_sub s,".DB.".cen_problem_sub2 s2 where s.problem_sub_desc=? and s.problem_sub_id=s2.problem_sub_id;
 		";
 		$rs= $db->sqlexe($sql,[$pno]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}		
+function getProblemsub(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$pno=$data['pno'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select problem_sub_id,prob_gid from ".DB.".cen_problem_sub  where problem_sub_desc=? 
+		";
+		$rs= $db->sqlexe($sql,[$pno]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}		
+function genProblemsub2(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$problem_sub_id=$data['problem_sub_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select problem_sub2_id,problem_sub2_desc from ".DB.".cen_problem_sub2  where problem_sub_id=? 
+		";
+		$rs= $db->sqlexe($sql,[$problem_sub_id]);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}		
+function genProblemgroup(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select prob_gid,prob_gdesc from ".DB.".cen_problem_group where problem_type='P2'   
+		";
+		$rs= $db->sqlexe($sql);
+		if($db->isOk()){		
+			$arr=[
+					"status"=>true,
+					"data"=>$rs
+				];			
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r\n\r\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+}		
+function genProblemsub(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$prob_gid=$data['prob_gid'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();		
+		$sql="
+		select problem_sub_id,problem_sub_desc from ".DB.".cen_problem_sub where prob_gid=?   
+		";
+		$rs= $db->sqlexe($sql,[$prob_gid]);
 		if($db->isOk()){		
 			$arr=[
 					"status"=>true,
