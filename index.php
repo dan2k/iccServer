@@ -49,6 +49,7 @@ $app->post('/getProblemsub','getProblemsub');
 $app->post('/genProblemsub2','genProblemsub2');
 $app->post('/genProblemgroup','genProblemgroup');
 $app->post('/genProblemsub','genProblemsub');
+$app->post('/createSv','createSv');
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -132,6 +133,7 @@ function test(Request $request, Response $response){
 		echo json_encode($arr);
 		
 }
+
 function getWorktype(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
@@ -724,6 +726,203 @@ function uploadComment(Request $request, Response $response){
     $response = $response->withJson($arr);
     return $response;
 }
+function createSv(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$custPtype=$data['cust_ptype'];
+	$custPcode=$data['cust_pcode'];
+	$msvno=$data['msv_no'];
+	$msvUid=$data['msv_uid'];
+	$data2=$data['data'];
+
+	
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$userData=$ck['data'];
+		//print_r($userData);
+		$db=new DB();
+		$db->beginTransaction("บันทึกการแจ้งปัญหา");
+		$sql="select comment_adate,comment_atime from ".DB.".mobile_comment where sv_no=? order by comment_no desc limit 1";
+		$rs=$db->sqlexe($sql,[$msvno]);
+		$svDate=$rs[0]['comment_adate'];
+		$svTime=$rs[0]['comment_atime'];
+		if(in_array($userData['place_type'],['P','R'])){
+			$rg=substr($userData['sect_id'],1,2);
+		}else{
+			$rg='00';
+		}
+		$y=date('Y')+543;
+		$yy=substr($y,2,2);
+		$pre="RG${rg}${yy}";
+		$sql="select lpad(if(max(substr(sv_no,7,length(sv_no))) is null,1,max(substr(sv_no,7,length(sv_no)))+1),4,'0') as nox from ".DB.".sv_service where sv_no like :pre ";
+		$rs=$db->sqlexe($sql,['pre'=>$pre]);
+		$svno=$pre.$rs[0]['nox'];
+		echo $svno;
+		for($i=0;$i<count($data2);$i++){
+			$sql="
+			INSERT INTO ".DB.".`sv_service` (
+				`sv_no`
+				, `cust_ptype`
+				, `cust_pcode`
+				, `problem_type`
+				, `work_type_id`
+				, `prob_gid`
+				, `problem_sub_id`
+				, `problem_sub2_id`
+				, `sv_date`
+				, `sv_time`
+				, `user_id`
+				, `sv_detail`
+				, `sv_resp_date
+				`, `sv_resp_time`
+				, `sv_resp_emp`
+				, `cause`
+				, `sv_flag`
+				, `draw_flag`
+				, `repair_flag`
+				, `doc_no`
+				, `sv_start_date`
+				, `sv_start_time`
+				, `sv_solve_detail`
+				, `sv_solve_date`
+				, `sv_solve_time`
+				, `sv_solve_emp`
+				, `sv_fin_date`
+				, `sv_fin_time`
+				, `sv_fin_emp`
+				, `contract_no`
+				, `status_id`
+				, `equip_pair_id`
+				, `kp_id`
+				, `sv_ip`
+				, `sv_sn`
+				, `sv_seq`
+				, `sv_approve_flag`
+				, `sv_satisfaction`
+				, `appointments_date`
+				, `appointments_time`
+				, `sv_assist_emp1`
+				, `sv_assist_emp2`
+				, `rkp_id`
+				, `type_id`
+				, `job_type`
+				, `msv_no`
+				, `msv_status`
+				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+			";
+			/*$db->sqlexe($sql,[
+			    $svno
+				, $custPtype
+				, $custPcode
+				, $data2[$i]['problem_type']
+				, $data2[$i]['work_type_id']
+				, $data2[$i]['prob_gid']
+				, $data2[$i]['problem_sub_id']
+				, $data2[$i]['problem_sub2_id']
+				, $svDate
+				, $svTime
+				, $data2[$i]['msv_uid']
+				, $data2[$i]['detail']
+				, date('Y-m-d')//`sv_resp_date
+				, date('H:i:s')//`sv_resp_time`
+				, $userId//`sv_resp_emp`
+				, ''//`cause`
+				, ''//`sv_flag`
+				, ''//`draw_flag`
+				, ''//`repair_flag`
+				, ''//`doc_no`
+				, ''//`sv_start_date`
+				, ''//`sv_start_time`
+				, ''//`sv_solve_detail`
+				, ''//`sv_solve_date`
+				, ''//`sv_solve_time`
+				, ''//`sv_solve_emp`
+				, ''//`sv_fin_date`
+				, ''//`sv_fin_time`
+				, ''//`sv_fin_emp`
+				, ''//`contract_no`
+				, ''//`status_id`
+				, ''//`equip_pair_id`
+				, ''//`kp_id`
+				, ''//`sv_ip`
+				, ''//`sv_sn`
+				, ''//`sv_seq`
+				, ''//`sv_approve_flag`
+				, ''//`sv_satisfaction`
+				, ''//`appointments_date`
+				, ''//`appointments_time`
+				, ''//`sv_assist_emp1`
+				, ''//`sv_assist_emp2`
+				, ''//`rkp_id`
+				, ''//`type_id`
+				, ''//`job_type`
+				, $msvno//`msv_no`
+				, 2//`msv_status`
+
+			]);*/
+			echo $sql."<br>";	
+		}
+
+		
+
+		exit;
+		$sql="
+			select 
+				concat('0',p.section_id) as rg 
+			from 
+				".DB.".cen_province p 
+				,".DB.".cen_cust_place p2 
+			where 
+				p2.cust_ptype=:custPtype 
+				and p2.cust_pcode=:custPcode
+				and p2.cc=p.province_id 
+		";
+		$rs=$db->sqlexe($sql,['custPtype'=>$custPtype,'custPcode'=>$custPcode]);
+		$rg=$rs[0]['rg'];
+		$yy=substr(date('Y')+543,2,2);
+		
+		$prekey="MRG".$rg.$yy."%";
+		//msv_no
+		$sql="
+		select if(max(substr(msv_no,8,7)) is null,1,max(substr(msv_no,8,7))+1) as no from ".DB.".mobile_sv where msv_no like :prekey 
+		";
+		$rs=$db->sqlexe($sql,['prekey'=>$prekey]);
+		$no=$rs[0]['no'];
+		$msvNo="MRG$rg$yy".sprintf('%07d',$no);
+		$sql="insert into ".DB.".mobile_sv(msv_no,msv_uid,msv_type,msv_detail,cust_ptype,cust_pcode,msv_adate,msv_atime,msv_status)  values(?,?,?,?,?,?,now(),now(),0)";
+		$params=[$msvNo,$userId,$ptype,$msvDetail,$custPtype,$custPcode];
+		$db->sqlexe($sql,$params);
+		
+		//เก็บ ทราน ไว้ที่ sv_trans
+		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time) values(?,?,?,?,?,?,?,?,?,0,now(),now())";
+		$seq=1;//ทรานแรกสุด
+		$userType=1;
+		$kpid=$userData['job_id'];
+		$skpid=$userData['job_id'];
+		$rkpid=$userData['job_id'];
+		$params=[$msvNo,$seq,$userId,$userType,$kpid,$skpid,$rkpid,$custPtype,$custPcode];
+		$db->sqlexe($sql,$params);
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
+				"msg"=>"Insert Ok",
+				"msv_no"=>$msvNo
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+		$db->endTransaction();
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+};
 function saveProblem(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
@@ -756,7 +955,7 @@ function saveProblem(Request $request, Response $response){
 		$prekey="MRG".$rg.$yy."%";
 		//msv_no
 		$sql="
-		select max(substr(msv_no,8,7))+1 as no from ".DB.".mobile_sv where msv_no like :prekey 
+		select if(max(substr(msv_no,8,7)) is null,1,max(substr(msv_no,8,7))+1) as no from ".DB.".mobile_sv where msv_no like :prekey 
 		";
 		$rs=$db->sqlexe($sql,['prekey'=>$prekey]);
 		$no=$rs[0]['no'];
@@ -967,7 +1166,7 @@ function close(Request $request, Response $response){
 			$kpid=$user['job_id'];
 			$userType=1;
 			$sql="update ".DB.".mobile_sv set
-						msv_status='1',
+						msv_status='6',
 						msv_solve=:solve,
 						msv_udate=now(),
 						msv_utime=now(),
@@ -1073,7 +1272,7 @@ function getJob(Request $request, Response $response){
 					".DB.".cen_cust_place p,
 					".DB.".cen_province pp
 				where
-					sv.msv_status in(0,1,3,5)
+					sv.msv_status in(0,4,6)
 					$cptype
                     $cpcode					 
 					and sv.cust_ptype=u.cust_ptype
