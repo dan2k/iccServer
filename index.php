@@ -50,6 +50,7 @@ $app->post('/genProblemsub2','genProblemsub2');
 $app->post('/genProblemgroup','genProblemgroup');
 $app->post('/genProblemsub','genProblemsub');
 $app->post('/createSv','createSv');
+$app->post('/returnJob','returnJob');
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -1045,6 +1046,24 @@ function saveComment(Request $request, Response $response){
     $response = $response->withJson($arr);
     return $response;
 };
+function jobTokeeper($job_id){
+	switch($job_id){
+		case 3:$kpid=4;break;//ศภ
+		case 4:$kpid=6;break;//สก
+		case 5:$kpid=9;break;//ศลก
+		case 8:$kpid=10;break;//ห้างสรรพสินค้า
+		default : $kpid=$job_id;break;
+	}
+	return $kpid;
+}
+function typeTokeeper($type){
+	switch($type){
+		case 'P':$kpid=3;break;
+		case 'R':$kpid=5;break;
+		default :$kpid=7;break;
+	}
+	return $kpid;
+}
 function confirmClose(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
@@ -1061,9 +1080,8 @@ function confirmClose(Request $request, Response $response){
 		$sql="select skp_id from ".DB.".sv_trans where sv_no=:svNo and seq=1";	
 		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
 		$skpid=$rs[0]['skp_id'];
-		$rkpid=$skpid;
-		$kpid=$skpid;
-		
+		$kpid=$skpid;//กลับสู่ผู้เปิด
+		$rkpid=jobTokeeper($user['job_id']);
 		$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
 		$rs=$db->sqlexe($sqlmax,['svNo'=>$msvNo]);
 		$seq=$rs[0]['m']+1;
@@ -1075,17 +1093,21 @@ function confirmClose(Request $request, Response $response){
 		if($isMoi=='M'){
 			$userType=1;
 			$sql="update ".DB.".mobile_sv set
-						msv_status='4',
+						msv_status='8',
 						msv_udate=now(),
 						msv_utime=now(),
 						msv_updid=:userId
 					where 
 						msv_no=:msvNo	
 					";
+			$db->sqlexe($sql,$params);
 		}else{
 			$userType=2;
 			$sql="update ".DB.".sv_service set
-						msv_status='4',
+						msv_status='8',
+						status_id='8',
+						kp_id=:kpid,
+						rkp_id=:rkpid,
 						sv_fin_date=now(),
 						sv_fin_time=now(),
 						sv_fin_emp=:userId,
@@ -1094,9 +1116,12 @@ function confirmClose(Request $request, Response $response){
 						sv_no=:msvNo
 					
 			";
+			$params['kpid']=$kpid;
+			$params['rkpid']=$rkpid;
 			$params['rate']=$data['rate'];
+			$db->sqlexe($sql,$params);
 		}
-		$db->sqlexe($sql,$params);
+		
 		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time)
 					values(:F1,:F2,:F3,:F4,:F5,:F6,:F7,:F8,:F9,:F10,:F11,:F12)
 				";
@@ -1110,7 +1135,7 @@ function confirmClose(Request $request, Response $response){
 				"F7"=>$rkpid,
 				"F8"=>$custptype,
 				"F9"=>$custpcode,
-				"F10"=>4,
+				"F10"=>8,
 				"F11"=>date('Y-m-d'),
 				"F12"=>date('H:i:s')
 		]);
@@ -1133,7 +1158,8 @@ function confirmClose(Request $request, Response $response){
     return $response;
 	
 };
-function close(Request $request, Response $response){
+
+function close(Request $request, Response $response){//ตอนที่ cdg ปิดจ๊อบ หรือ  ศจ.ปิดจ๊อบ
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
 	$data=$request->getParam('data');
@@ -1147,11 +1173,11 @@ function close(Request $request, Response $response){
 		$db=new DB();
 		$db->beginTransaction('เริ่มทำ ยืนยันการปิดงาน');
 		$isMoi=substr($msvNo,0,1);	
+		
 		$sql="select skp_id,rkp_id from ".DB.".sv_trans where sv_no=:svNo and seq=1";	
 		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
 		$skpid=$rs[0]['skp_id'];
-		$rkpid=$rs[0]['rkp_id'];
-		
+		$kpid=$skpid;
 		
 		$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
 		$rs=$db->sqlexe($sqlmax,['svNo'=>$msvNo]);
@@ -1163,7 +1189,8 @@ function close(Request $request, Response $response){
 		$params['userId']=$userId;
 		$params['solve']=$solve;
 		if($isMoi=='M'){
-			$kpid=$user['job_id'];
+			//สลับระหว่าง cen_job กับ cen_keeper  โดยใช้ job_id เทียบ
+			$rkpid=jobTokeeper($user['job_id']);
 			$userType=1;
 			$sql="update ".DB.".mobile_sv set
 						msv_status='6',
@@ -1173,17 +1200,17 @@ function close(Request $request, Response $response){
 						msv_updid=:userId
 					where 
 						msv_no=:msvNo	
-					";
+			";
+			$db->sqlexe($sql,$params);
 		}else{
 			$userType=2;
-			switch($user['place_type']){
-				case 'P':$kpid=3;break;
-				case 'R':$kpid=5;break;
-				default :$kpid=7;break;
-			}
+			$rkpid=typeTokeeper($user['place_type']);
 			$sql="update ".DB.".sv_service set
-						msv_status='1',
-						sv_solve_detail:solve,
+						kp_id=:kpid,
+						rkp_id=:rkpid,
+						status_id='6',
+						msv_status='6',
+						sv_solve_detail=:solve,
 						sv_solve_date=now(),
 						sv_solve_time=now(),
 						sv_solve_emp=:userId,
@@ -1191,9 +1218,11 @@ function close(Request $request, Response $response){
 						sv_no=:msvNo
 					
 			";
-			
+			$params['kpid']=$kpid;
+			$params['rkpid']=$rkpid;
+			$db->sqlexe($sql,$params);
 		}
-		$db->sqlexe($sql,$params);
+		
 		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time)
 					values(:F1,:F2,:F3,:F4,:F5,:F6,:F7,:F8,:F9,:F10,:F11,:F12)
 				";
@@ -1207,7 +1236,7 @@ function close(Request $request, Response $response){
 				"F7"=>$rkpid,
 				"F8"=>$custptype,
 				"F9"=>$custpcode,
-				"F10"=>1,
+				"F10"=>6,
 				"F11"=>date('Y-m-d'),
 				"F12"=>date('H:i:s')
 		]);
@@ -1228,7 +1257,103 @@ function close(Request $request, Response $response){
 	$response = $response->withStatus(201);
     $response = $response->withJson($arr);
     return $response;
-	
+};
+function returnJob(Request $request, Response $response){//ตอนที่ cdg ปิดจ๊อบ หรือ  ศจ.ปิดจ๊อบ
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$svNo=$data['svno'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$user=$ck['data'];
+		$db=new DB();
+		$db->beginTransaction('เริ่มทำ ยืนยันการปิดงาน');
+		$isMoi=substr($svNo,0,1);	
+
+
+		$sql="select kp_id,skp_id,rkp_id from ".DB.".sv_trans where sv_no=:svNo order by seq desc limit 1";	
+		$rs=$db->sqlexe($sql,['svNo'=>$svNo]);
+		$skpid=$rs[0]['skp_id'];
+		$kpid=$rs[0]['rkp_id'];
+		$rkpid=$rs[0]['kp_id'];
+
+		
+		$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
+		$rs=$db->sqlexe($sqlmax,['svNo'=>$svNo]);
+		$seq=$rs[0]['m']+1;
+		
+		$custptype=$isMoi=='M'?$user['cust_ptype']:$user['place_type'];
+		$custpcode=$isMoi=='M'?$user['cust_pcode']:$user['place_code'];
+		$params['msvNo']=$svNo;
+		$params['userId']=$userId;
+
+		if($isMoi=='M'){
+			$userType=1;
+			$sql="update ".DB.".mobile_sv set
+						msv_status='6',
+						msv_udate=now(),
+						msv_utime=now(),
+						msv_updid=:userId
+					where 
+						msv_no=:msvNo	
+			";
+			$db->sqlexe($sql,$params);
+		}else{
+			$userType=2;
+			$rkpid=typeTokeeper($user['place_type']);
+			$sql="update ".DB.".sv_service set
+						kp_id=:kpid,
+						rkp_id=:rkpid,
+						status_id='6',
+						msv_status='6',
+						sv_solve_detail=:solve,
+						sv_solve_date=now(),
+						sv_solve_time=now(),
+						sv_solve_emp=:userId,
+					where 
+						sv_no=:msvNo
+					
+			";
+			$params['kpid']=$kpid;
+			$params['rkpid']=$rkpid;
+			$db->sqlexe($sql,$params);
+		}
+		
+		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time)
+					values(:F1,:F2,:F3,:F4,:F5,:F6,:F7,:F8,:F9,:F10,:F11,:F12)
+				";
+		$db->sqlexe($sql,[
+				"F1"=>$svNo,
+				"F2"=>$seq,
+				"F3"=>$userId,
+				"F4"=>$userType,
+				"F5"=>$kpid,
+				"F6"=>$skpid,
+				"F7"=>$rkpid,
+				"F8"=>$custptype,
+				"F9"=>$custpcode,
+				"F10"=>6,
+				"F11"=>date('Y-m-d'),
+				"F12"=>date('H:i:s')
+		]);
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
+				"msg"=>"return Job Ok",
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+		$db->endTransaction();
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
 };
 function getJob(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
@@ -1266,6 +1391,10 @@ function getJob(Request $request, Response $response){
 		$sql="select 
 				sv.*,
 				concat(u.user_fname,' ',u.user_lname) as thiname
+				,(select status_desc from ".DB.".cen_status where sv.msv_status=status_id) as msv_status_desc
+				,(select k.kp_desc from ".DB.".cen_keeper k,".DB.".sv_trans t where k.kp_id=t.kp_id and t.sv_no=sv.msv_no and t.status_id=sv.msv_status order by seq desc limit 1) as kp_desc
+				,(select kp_id from ".DB.".sv_trans where sv_no=sv.msv_no order by seq desc limit 1) as  kp_idx
+				,(select skp_id from ".DB.".sv_trans where sv_no=sv.msv_no order by seq desc limit 1) as  skp_idx
 			from 
 					".DB.".mobile_sv sv,
 					".DB.".cen_user u,
@@ -1283,6 +1412,7 @@ function getJob(Request $request, Response $response){
 					and pp.province_id=p.cc
 					$cScope
 				";
+				//echo $sql;
 		$params=null;
 		if($custPtype!=''){$params['custPtype']=$custPtype;}
 		if($custPcode!=''){$params['custPcode']=$custPcode;}
@@ -1305,7 +1435,10 @@ function getJob(Request $request, Response $response){
 				 ,sv.cust_pcode
 				 ,sv.msv_no as msv_no2
 				 ,sv.msv_status
-
+				 ,(select status_desc from ".DB.".cen_status where sv.msv_status=status_id) as msv_status_desc
+				 ,(select k.kp_desc from ".DB.".cen_keeper k,".DB.".sv_trans t where k.kp_id=t.kp_id and t.sv_no=sv.sv_no and t.status_id=sv.status_id) as kp_desc
+				 ,(select kp_id from ".DB.".sv_trans where sv_no=sv.sv_no order by seq desc limit 1) as  kp_idx
+				 ,(select skp_id from ".DB.".sv_trans where sv_no=sv.sv_no order by seq desc limit 1) as  skp_idx
 				 
 			from 
 				".DB.".sv_service sv,
@@ -1398,7 +1531,7 @@ function getComment(Request $request, Response $response){
 			select 
 					c.*,
 					case c.comment_utype
-						when 1 then (select concat(u.user_fname,' ',u.user_lname) from ".DB.".mobile_sv s,".DB.".cen_user u where s.msv_no=:svNo2 and s.msv_uid=u.user_id and s.cust_ptype=u.cust_ptype and s.cust_pcode=u.user_rcode) 
+						when 1 then (select concat(u.user_fname,' ',u.user_lname) from ".DB.".cen_user u where c.comment_uid=u.user_id and c.comment_custptype=u.cust_ptype and c.comment_custpcode=u.user_rcode) 
 						when 2 then (select concat(e.emp_fname,' ',e.emp_lname) from ".DB.".cen_emp e where  e.emp_id=c.comment_uid )
 					end as thiname
 				from 
@@ -1406,7 +1539,7 @@ function getComment(Request $request, Response $response){
 				where 
 				c.sv_no=:svNo
 				";
-		$rs=$db->sqlexe($sql,['svNo'=>$msvNo,'svNo2'=>$svno]);
+		$rs=$db->sqlexe($sql,['svNo'=>$msvNo]);
 		if($db->isOk()){			
 			$arr=[
 					"status"=>true,
