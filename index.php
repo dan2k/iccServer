@@ -51,6 +51,8 @@ $app->post('/genProblemgroup','genProblemgroup');
 $app->post('/genProblemsub','genProblemsub');
 $app->post('/createSv','createSv');
 $app->post('/returnJob','returnJob');
+$app->post('/hwEdit','hwEdit');
+
 $app->post('/test','test');
 $app->run();
 function test(Request $request, Response $response){
@@ -243,6 +245,7 @@ function listEquip(Request $request, Response $response){
 		select 
 			e.pno
 			,e.sno
+			,e.contract_no
 			,w.work_type_id
 			,w.work_type_desc
 			,e.equip_set_id
@@ -254,6 +257,7 @@ function listEquip(Request $request, Response $response){
 			,".DB.".cen_work_type w
 			,".DB.".cen_contract c
 			,".DB.".cen_equip_set s
+			,".DB.".cen_group_contract g
 			,".STOCK.".st_equip pno
 		where 
 			e.cust_ptype=?
@@ -263,9 +267,12 @@ function listEquip(Request $request, Response $response){
 			and e.pno=pno.pno
 			and e.work_type_id=w.work_type_id
 			and e.equip_set_id=s.equip_set_id
-			and e.contract_no=c.contract_no
+			and e.cust_ptype=g.cust_ptype
+			and e.cust_pcode=g.cust_pcode
+			and e.contract_group=g.contract_group
+			and g.contract_group=c.contract_group
 			and c.contract_no_ext='N'
-			and c.contract_status=''
+			and c.contract_status='';
 		order by e.pno;
 		";
 		$rs= $db->sqlexe($sql,[$custPtype,$custPcode,$workTypeId,$equipSetId]);
@@ -317,7 +324,9 @@ function listSymptom(Request $request, Response $response){
     $response = $response->withJson($arr);
     return $response;
 	
-}		
+}
+
+
 function getProblemsub(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
@@ -389,7 +398,7 @@ function genProblemgroup(Request $request, Response $response){
 	if($ck['status']){
 		$db=new DB();		
 		$sql="
-		select prob_gid,prob_gdesc from ".DB.".cen_problem_group where problem_type='P2'   
+		select prob_gid,prob_gdesc,contract_no from ".DB.".cen_problem_group where problem_type='P2'   
 		";
 		$rs= $db->sqlexe($sql);
 		if($db->isOk()){		
@@ -734,34 +743,46 @@ function createSv(Request $request, Response $response){
 	$userId=$data['user_id'];
 	$custPtype=$data['cust_ptype'];
 	$custPcode=$data['cust_pcode'];
+	
 	$msvno=$data['msv_no'];
 	$msvUid=$data['msv_uid'];
 	$data2=$data['data'];
 
-	
+	//print_r($data2);
 	$ck=ckToken($token,$userId);
 	if($ck['status']){
 		$userData=$ck['data'];
-		//print_r($userData);
+		$custptype=$userData['place_type'];
+		$custpcode=$userData['place_code'];
 		$db=new DB();
 		$db->beginTransaction("บันทึกการแจ้งปัญหา");
 		$sql="select comment_adate,comment_atime from ".DB.".mobile_comment where sv_no=? order by comment_no desc limit 1";
 		$rs=$db->sqlexe($sql,[$msvno]);
 		$svDate=$rs[0]['comment_adate'];
 		$svTime=$rs[0]['comment_atime'];
-		if(in_array($userData['place_type'],['P','R'])){
-			$rg=substr($userData['sect_id'],1,2);
-		}else{
-			$rg='00';
-		}
-		$y=date('Y')+543;
-		$yy=substr($y,2,2);
-		$pre="RG${rg}${yy}";
-		$sql="select lpad(if(max(substr(sv_no,7,length(sv_no))) is null,1,max(substr(sv_no,7,length(sv_no)))+1),4,'0') as nox from ".DB.".sv_service where sv_no like :pre ";
-		$rs=$db->sqlexe($sql,['pre'=>$pre]);
-		$svno=$pre.$rs[0]['nox'];
-		echo $svno;
+		$sql="select skp_id from ".DB.".sv_trans where sv_no=:svNo and seq=1";	
+		$rs=$db->sqlexe($sql,['svNo'=>$msvno]);
+		$kpid=typeTokeeper($userData['place_type']);
+		$skpid=$rs[0]['skp_id'];
+		$rkpid=$rs[0]['skp_id'];
 		for($i=0;$i<count($data2);$i++){
+			
+			if(in_array($userData['place_type'],['P','R'])){
+				$rg=substr($userData['sect_id'],1,1);
+			}else{
+				$rg='0';
+			}
+			$y=date('Y')+543;
+			$yy=substr($y,2,2);
+			$pre="RG0${rg}${yy}";
+			//$sql="select lpad(if(max(substr(sv_no,7,length(sv_no))) is null,1,max(substr(sv_no,7,length(sv_no)))+1),4,'0') as nox from ".DB.".sv_service where sv_no like '%$pre' ";
+			//$sql="select if(max(substr(sv_no,7,length(sv_no))) is null,1,max(substr(sv_no,7,length(sv_no)))+1) as no  from ".DB.".sv_service where sv_no like :pre";
+			$sql="select if(max(substr(sv_no,7,length(sv_no))) is null,1,max(substr(sv_no,7,length(sv_no)))+1) as no from sv_service where sv_no like '$pre%'";
+			//$rs=$db->sqlexe($sql,['pre'=>$pre]);
+			$rs=$db->sqlexe($sql);
+			$svno=$pre.sprintf('%04d',$rs[0]['no']);
+
+
 			$sql="
 			INSERT INTO ".DB.".`sv_service` (
 				`sv_no`
@@ -776,8 +797,8 @@ function createSv(Request $request, Response $response){
 				, `sv_time`
 				, `user_id`
 				, `sv_detail`
-				, `sv_resp_date
-				`, `sv_resp_time`
+				, `sv_resp_date`
+				, `sv_resp_time`
 				, `sv_resp_emp`
 				, `cause`
 				, `sv_flag`
@@ -813,7 +834,7 @@ function createSv(Request $request, Response $response){
 				, `msv_status`
 				) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 			";
-			/*$db->sqlexe($sql,[
+			$params=[
 			    $svno
 				, $custPtype
 				, $custPcode
@@ -824,7 +845,7 @@ function createSv(Request $request, Response $response){
 				, $data2[$i]['problem_sub2_id']
 				, $svDate
 				, $svTime
-				, $data2[$i]['msv_uid']
+				, $msvUid//`user_id`
 				, $data2[$i]['detail']
 				, date('Y-m-d')//`sv_resp_date
 				, date('H:i:s')//`sv_resp_time`
@@ -843,12 +864,12 @@ function createSv(Request $request, Response $response){
 				, ''//`sv_fin_date`
 				, ''//`sv_fin_time`
 				, ''//`sv_fin_emp`
-				, ''//`contract_no`
-				, ''//`status_id`
+				, $data2[$i]['contract_no']//`contract_no`
+				, 4//`status_id`
 				, ''//`equip_pair_id`
-				, ''//`kp_id`
+				, $kpid//`kp_id`
 				, ''//`sv_ip`
-				, ''//`sv_sn`
+				, $data2[$i]['problem_type']=='P1'?$data2[$i]['sno']:''//`sv_sn`
 				, ''//`sv_seq`
 				, ''//`sv_approve_flag`
 				, ''//`sv_satisfaction`
@@ -856,60 +877,79 @@ function createSv(Request $request, Response $response){
 				, ''//`appointments_time`
 				, ''//`sv_assist_emp1`
 				, ''//`sv_assist_emp2`
-				, ''//`rkp_id`
+				, $rkpid//`rkp_id`
 				, ''//`type_id`
 				, ''//`job_type`
 				, $msvno//`msv_no`
-				, 2//`msv_status`
-
-			]);*/
-			echo $sql."<br>";	
+				, 4//`msv_status`
+			];
+			
+			$db->sqlexe($sql,$params);
+			
+			// เริ่มทำการเก็บทราน
+			// 1.copy ทรานจาก job ต้นทาง
+			$sql="
+			insert into ".DB.".sv_trans 
+				select :svno,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time from ".DB.".sv_trans where sv_no=:msvno ;
+			";
+			$rsx=$db->sqlexe($sql,['svno'=>$svno,'msvno'=>$msvno]);
+			//echo $sql."\n\r";
+			// 2.เพิ่มทราน รับจากต้นทาง
+			$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
+			$rs=$db->sqlexe($sqlmax,['svNo'=>$svno]);
+			$seq=$rs[0]['m']+1;
+			$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time)
+			values(:F1,:F2,:F3,:F4,:F5,:F6,:F7,:F8,:F9,:F10,:F11,:F12)
+					";
+			$db->sqlexe($sql,[
+					"F1"=>$svno,
+					"F2"=>$seq,
+					"F3"=>$userId,
+					"F4"=>2,
+					"F5"=>$kpid,
+					"F6"=>$skpid,
+					"F7"=>$rkpid,
+					"F8"=>$custptype,
+					"F9"=>$custpcode,
+					"F10"=>4,
+					"F11"=>date('Y-m-d'),
+					"F12"=>date('H:i:s')
+			]);
+			//echo $sql;	
 		}
+		// 3.ทำการปิดทรานต้นทางโดย set msv_status=9
+		$sql="select skp_id from ".DB.".sv_trans where sv_no=:svNo and seq=1";	
+		$rs=$db->sqlexe($sql,['svNo'=>$msvno]);
+		$rpid=typeTokeeper($userData['place_type']);
+		$skpid=$rs[0]['skp_id'];
+		$kpid=$rs[0]['skp_id'];
 
-		
-
-		exit;
-		$sql="
-			select 
-				concat('0',p.section_id) as rg 
-			from 
-				".DB.".cen_province p 
-				,".DB.".cen_cust_place p2 
-			where 
-				p2.cust_ptype=:custPtype 
-				and p2.cust_pcode=:custPcode
-				and p2.cc=p.province_id 
-		";
-		$rs=$db->sqlexe($sql,['custPtype'=>$custPtype,'custPcode'=>$custPcode]);
-		$rg=$rs[0]['rg'];
-		$yy=substr(date('Y')+543,2,2);
-		
-		$prekey="MRG".$rg.$yy."%";
-		//msv_no
-		$sql="
-		select if(max(substr(msv_no,8,7)) is null,1,max(substr(msv_no,8,7))+1) as no from ".DB.".mobile_sv where msv_no like :prekey 
-		";
-		$rs=$db->sqlexe($sql,['prekey'=>$prekey]);
-		$no=$rs[0]['no'];
-		$msvNo="MRG$rg$yy".sprintf('%07d',$no);
-		$sql="insert into ".DB.".mobile_sv(msv_no,msv_uid,msv_type,msv_detail,cust_ptype,cust_pcode,msv_adate,msv_atime,msv_status)  values(?,?,?,?,?,?,now(),now(),0)";
-		$params=[$msvNo,$userId,$ptype,$msvDetail,$custPtype,$custPcode];
-		$db->sqlexe($sql,$params);
-		
-		//เก็บ ทราน ไว้ที่ sv_trans
-		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time) values(?,?,?,?,?,?,?,?,?,0,now(),now())";
-		$seq=1;//ทรานแรกสุด
-		$userType=1;
-		$kpid=$userData['job_id'];
-		$skpid=$userData['job_id'];
-		$rkpid=$userData['job_id'];
-		$params=[$msvNo,$seq,$userId,$userType,$kpid,$skpid,$rkpid,$custPtype,$custPcode];
-		$db->sqlexe($sql,$params);
+		$sqlmax="select max(seq) as m,skp_id from ".DB.".sv_trans where sv_no=:svNo";
+		$rs=$db->sqlexe($sqlmax,['svNo'=>$msvno]);
+		$seq=$rs[0]['m']+1;
+		$sql=" insert into ".DB.".sv_trans(sv_no,seq,user_id,user_type,kp_id,skp_id,rkp_id,cust_ptype,cust_pcode,status_id,upd_date,upd_time)
+		values(:F1,:F2,:F3,:F4,:F5,:F6,:F7,:F8,:F9,:F10,:F11,:F12)
+				";
+		$db->sqlexe($sql,[
+				"F1"=>$msvno,
+				"F2"=>$seq,
+				"F3"=>$userId,
+				"F4"=>2,
+				"F5"=>$kpid,
+				"F6"=>$skpid,
+				"F7"=>$rkpid,
+				"F8"=>$custptype,
+				"F9"=>$custpcode,
+				"F10"=>9,
+				"F11"=>date('Y-m-d'),
+				"F12"=>date('H:i:s')
+		]);
+		$sql="update ".DB.".mobile_sv set msv_status=9,msv_udate=now(),msv_utime=now(),msv_updid=:userId where msv_no=:msvno";
+		$db->sqlexe($sql,['userId'=>$userId,'msvno'=>$msvno]);
 		if($db->isOk()){
 			$arr=[
 				"status"=>true,
-				"msg"=>"Insert Ok",
-				"msv_no"=>$msvNo
+				"msg"=>"สร้าง service เรียบร้อยแล้ว้",
 			];
 		}else{
 			$arr=["status"=>false,"msg"=>$db->getError()];
@@ -924,6 +964,7 @@ function createSv(Request $request, Response $response){
     $response = $response->withJson($arr);
     return $response;
 };
+
 function saveProblem(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
@@ -1032,6 +1073,59 @@ function saveComment(Request $request, Response $response){
 				"sv_no"=>$msvNo,
 				"comment_no"=>$no,
 				"pno"=>$pno	
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+		$db->endTransaction();
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+};
+function hwEdit(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();
+		$db->beginTransaction("เพิ่ม แก้ไข job");
+		$sql="select problem_sub_id,prob_gid from ".DB.".cen_problem_sub where problem_sub_desc=?";
+		$rs=$db->sqlexe($sql,[$data['problem_sub_desc']]);
+		$problem_sub_id=$rs[0]['problem_sub_id'];
+		$prob_gid=$rs[0]['prob_gid'];
+		$userData=$ck['data'];
+		$sql="update ".DB.".sv_service  set
+				work_type_id=?,
+				prob_gid=?,
+				problem_sub_id=?,
+				problem_sub2_id=?,
+				sv_detail=?,
+				sv_sn=?
+			  where 
+				  sv_no=?
+				  	
+		";
+		$arr=[
+			$data['work_type_id'],
+			$prob_gid,
+			$problem_sub_id,
+			$data['problem_sub2_id'],
+			$data['detail'],
+			$data['sno'],
+			$data['sv_no']
+		];
+		$db->sqlexe($sql,$arr);
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
+				"msg"=>"update  Ok",
 			];
 		}else{
 			$arr=["status"=>false,"msg"=>$db->getError()];
@@ -1355,6 +1449,50 @@ function returnJob(Request $request, Response $response){//ตอนที่ cd
     $response = $response->withJson($arr);
     return $response;
 };
+function getSvdata(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$msvNo=$data['msv_no'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();
+		$sql="
+			select  sv.*
+					,(select concat(user_fname,' ',user_lname) from ".DB.".cen_user where user_id=sv.msv_uid and cust_ptype=sv.cust_ptype and user_rcode=sv.cust_pcode) as thiname
+					,(select cust_pdesc from ".DB.".cen_cust_place where cust_ptype=sv.cust_ptype and cust_pcode=sv.cust_pcode) as cust_pdesc
+					,(select cust_desc from ".DB.".cen_type_custptype where cust_ptype=sv.cust_ptype) as cust_ptype_desc
+					,pp.province_name
+					from 
+						".DB.".mobile_sv sv,
+						".DB.".cen_cust_place c,
+						".DB.".cen_province pp 
+			where 
+				sv.msv_no=:msvNo
+				and sv.cust_ptype=c.cust_ptype
+				and sv.cust_pcode=c.cust_pcode
+				and c.cc=pp.province_id";
+			
+		$rs=$db->sqlexe($sql,['msvNo'=>$msvNo]);
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
+				"data"=>$rs
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+	
+};
 function getJob(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
@@ -1395,7 +1533,14 @@ function getJob(Request $request, Response $response){
 				,(select k.kp_desc from ".DB.".cen_keeper k,".DB.".sv_trans t where k.kp_id=t.kp_id and t.sv_no=sv.msv_no and t.status_id=sv.msv_status order by seq desc limit 1) as kp_desc
 				,(select kp_id from ".DB.".sv_trans where sv_no=sv.msv_no order by seq desc limit 1) as  kp_idx
 				,(select skp_id from ".DB.".sv_trans where sv_no=sv.msv_no order by seq desc limit 1) as  skp_idx
-			from 
+				,(select cust_pdesc from ".DB.".cen_cust_place where cust_ptype=sv.cust_ptype and cust_pcode=sv.cust_pcode) as cust_pdesc
+				,(select cust_desc from ".DB.".cen_type_custptype where cust_ptype=sv.cust_ptype) as cust_ptype_desc
+				,pp.province_name
+				,case sv.msv_no
+					when substr(sv.msv_no,1,2)='RG' then true
+					else false
+				end as isRG
+				from 
 					".DB.".mobile_sv sv,
 					".DB.".cen_user u,
 					".DB.".cen_cust_place p,
@@ -1439,13 +1584,33 @@ function getJob(Request $request, Response $response){
 				 ,(select k.kp_desc from ".DB.".cen_keeper k,".DB.".sv_trans t where k.kp_id=t.kp_id and t.sv_no=sv.sv_no and t.status_id=sv.status_id) as kp_desc
 				 ,(select kp_id from ".DB.".sv_trans where sv_no=sv.sv_no order by seq desc limit 1) as  kp_idx
 				 ,(select skp_id from ".DB.".sv_trans where sv_no=sv.sv_no order by seq desc limit 1) as  skp_idx
-				 
+				 ,(select cust_pdesc from ".DB.".cen_cust_place where cust_ptype=sv.cust_ptype and cust_pcode=sv.cust_pcode) as cust_pdesc
+				 ,(select cust_desc from ".DB.".cen_type_custptype where cust_ptype=sv.cust_ptype) as cust_ptype_desc
+				 ,pp.province_name
+				 ,case sv.sv_no
+					when substr(sv.sv_no,1,2)='RG' then true
+					else false
+				 end as isRG
+				 ,sv.sv_sn
+				 ,sv.work_type_id
+				 ,(select work_type_desc from ".DB.".cen_work_type where work_type_id=sv.work_type_id) as work_type_desc
+				 #,sv.equip_set_id
+				 #,(select equip_set_desc from ".DB.".cen_equip_set where equip_set_id=sv.equip_set_id) as equip_set_desc
+				 ,sv.prob_gid
+				 ,(select prob_gdesc from ".DB.".cen_problem_group where prob_gid=sv.prob_gid) as prob_gdesc
+				 ,sv.problem_sub_id
+				 ,(select problem_sub_desc from ".DB.".cen_problem_sub where problem_sub_id=sv.problem_sub_id) as problem_sub_desc
+				 ,sv.problem_sub2_id
+				 ,(select problem_sub2_desc from ".DB.".cen_problem_sub2 where problem_sub2_id=sv.problem_sub2_id) as problem_sub2_desc
+				 ,(select e.equip_set_id from ".DB.".cen_cust_equip e,".DB.".cen_problem_sub ps where e.cust_ptype=sv.cust_ptype and e.cust_pcode=sv.cust_pcode and e.sno=sv.sv_sn and e.pno=ps.problem_sub_desc and ps.problem_sub_id=sv.problem_sub_id  ) as equip_set_id
+				 ,(select s.equip_set_desc from ".DB.".cen_equip_set s,".DB.".cen_cust_equip e,".DB.".cen_problem_sub ps where e.cust_ptype=sv.cust_ptype and e.cust_pcode=sv.cust_pcode and e.sno=sv.sv_sn and e.pno=ps.problem_sub_desc and ps.problem_sub_id=sv.problem_sub_id and e.equip_set_id=s.equip_set_id ) as equip_set_desc
+				 ,(select e.pno from ".DB.".cen_cust_equip e,".DB.".cen_problem_sub ps  where e.pno=ps.problem_sub_desc and ps.problem_sub_id=sv.problem_sub_id and  e.cust_ptype=sv.cust_ptype and e.cust_pcode=sv.cust_pcode and e.sno=sv.sv_sn) as pno
 			from 
 				".DB.".sv_service sv,
 				".DB.".cen_cust_place p,
 				".DB.".cen_province pp
 			where
-				sv.msv_status in(0,1,3,5)
+				sv.msv_status in(0,6,4)
 				$cptype
 				$cpcode
 				and sv.cust_ptype=p.cust_ptype
@@ -1475,41 +1640,7 @@ function getJob(Request $request, Response $response){
 	
 }
 
-function getSvdata(Request $request, Response $response){
-	$headers=$request->getHeader('x-access-token');
-	$token=$headers[0];
-	$data=$request->getParam('data');
-	$userId=$data['user_id'];
-	$msvNo=$data['msv_no'];
-	$ck=ckToken($token,$userId);
-	if($ck['status']){
-		$db=new DB();
-		$sql="
-			select  sv.*
-					,(select concat(user_fname,' ',user_lname) from ".DB.".cen_user where user_id=sv.msv_uid and cust_ptype=sv.cust_ptype and user_rcode=sv.cust_pcode) as thiname
-			from ".DB.".mobile_sv sv 
-			where 
-				sv.msv_no=:msvNo";
-			
-		$rs=$db->sqlexe($sql,['msvNo'=>$msvNo]);
-		if($db->isOk()){
-			$arr=[
-				"status"=>true,
-				"data"=>$rs
-			];
-		}else{
-			$arr=["status"=>false,"msg"=>$db->getError()];
-		}
-	}else{
-		$arr=$ck;
-	}
-	header('Content-type: text/html; charset=UTF-8');
-	echo "\n\r\n\r";
-	$response = $response->withStatus(201);
-    $response = $response->withJson($arr);
-    return $response;
-	
-};
+
 function getComment(Request $request, Response $response){
 	$headers=$request->getHeader('x-access-token');
 	$token=$headers[0];
