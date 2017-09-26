@@ -52,6 +52,8 @@ $app->post('/genProblemsub','genProblemsub');
 $app->post('/createSv','createSv');
 $app->post('/returnJob','returnJob');
 $app->post('/hwEdit','hwEdit');
+$app->post('/swEdit','swEdit');
+$app->post('/deleteSv','deleteSv');
 
 $app->post('/test','test');
 $app->run();
@@ -240,7 +242,9 @@ function listEquip(Request $request, Response $response){
 	$equipSetId=$data['equip_set_id'];
 	$ck=ckToken($token,$userId);
 	if($ck['status']){
-		$db=new DB();		
+		$db=new DB();
+
+	
 		$sql="
 		select 
 			e.pno
@@ -252,6 +256,8 @@ function listEquip(Request $request, Response $response){
 			,s.equip_set_desc 
 			,e.equip_pair_id
 			,pno.pic
+			,( select g.prob_gid from ".DB.".cen_problem_sub p,".DB.".cen_problem_group g where p.problem_sub_desc=e.pno and p.prob_gid=g.prob_gid limit 1) as prob_gid
+			,( select g.prob_gdesc from ".DB.".cen_problem_sub p,".DB.".cen_problem_group g where p.problem_sub_desc=e.pno and p.prob_gid=g.prob_gid limit 1) as prob_gdesc
 		from 
 			".DB.".cen_cust_equip e
 			,".DB.".cen_work_type w
@@ -259,6 +265,7 @@ function listEquip(Request $request, Response $response){
 			,".DB.".cen_equip_set s
 			,".DB.".cen_group_contract g
 			,".STOCK.".st_equip pno
+
 		where 
 			e.cust_ptype=?
 			and e.cust_pcode=?
@@ -273,6 +280,7 @@ function listEquip(Request $request, Response $response){
 			and g.contract_group=c.contract_group
 			and c.contract_no_ext='N'
 			and c.contract_status='';
+
 		order by e.pno;
 		";
 		$rs= $db->sqlexe($sql,[$custPtype,$custPcode,$workTypeId,$equipSetId]);
@@ -1095,7 +1103,7 @@ function hwEdit(Request $request, Response $response){
 	$ck=ckToken($token,$userId);
 	if($ck['status']){
 		$db=new DB();
-		$db->beginTransaction("เพิ่ม แก้ไข job");
+		$db->beginTransaction("แก้ไข job hw");
 		$sql="select problem_sub_id,prob_gid from ".DB.".cen_problem_sub where problem_sub_desc=?";
 		$rs=$db->sqlexe($sql,[$data['problem_sub_desc']]);
 		$problem_sub_id=$rs[0]['problem_sub_id'];
@@ -1107,7 +1115,8 @@ function hwEdit(Request $request, Response $response){
 				problem_sub_id=?,
 				problem_sub2_id=?,
 				sv_detail=?,
-				sv_sn=?
+				sv_sn=?,
+				contract_no=?
 			  where 
 				  sv_no=?
 				  	
@@ -1119,13 +1128,94 @@ function hwEdit(Request $request, Response $response){
 			$data['problem_sub2_id'],
 			$data['detail'],
 			$data['sno'],
-			$data['sv_no']
+			$data['contract_no'],
+			$data['sv_no'],
 		];
 		$db->sqlexe($sql,$arr);
 		if($db->isOk()){
 			$arr=[
 				"status"=>true,
 				"msg"=>"update  Ok",
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+		$db->endTransaction();
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+};
+function swEdit(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();
+		$db->beginTransaction("แก้ไข job sw");
+		$userData=$ck['data'];
+		$sql="update ".DB.".sv_service  set
+				prob_gid=?,
+				problem_sub_id=?,
+				problem_sub2_id=?,
+				sv_detail=?,
+				contract_no=?
+			  where 
+				  sv_no=?
+				  	
+		";
+		$arr=[
+			$data['prob_gid'],
+			$data['problem_sub_id'],
+			$data['problem_sub2_id'],
+			$data['detail'],
+			$data['contract_no'],
+			$data['sv_no'],
+		];
+		$db->sqlexe($sql,$arr);
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
+				"msg"=>"update  Ok",
+			];
+		}else{
+			$arr=["status"=>false,"msg"=>$db->getError()];
+		}
+		$db->endTransaction();
+	}else{
+		$arr=$ck;
+	}
+	header('Content-type: text/html; charset=UTF-8');
+	echo "\n\r\n\r";
+	$response = $response->withStatus(201);
+    $response = $response->withJson($arr);
+    return $response;
+};
+function deleteSv(Request $request, Response $response){
+	$headers=$request->getHeader('x-access-token');
+	$token=$headers[0];
+	$data=$request->getParam('data');
+	$userId=$data['user_id'];
+	$ck=ckToken($token,$userId);
+	if($ck['status']){
+		$db=new DB();
+		$db->beginTransaction("แก้ไข job sw");
+		$userData=$ck['data'];
+		$sql="delete from ".DB.".sv_service where sv_no=?";
+		$db->sqlexe($sql,[$data['sv_no']]);
+		$sql="delete from ".DB.".sv_trans where sv_no=?";
+		$db->sqlexe($sql,[$data['sv_no']]);
+
+		if($db->isOk()){
+			$arr=[
+				"status"=>true,
+				"msg"=>"delete  Ok",
 			];
 		}else{
 			$arr=["status"=>false,"msg"=>$db->getError()];
@@ -1580,6 +1670,7 @@ function getJob(Request $request, Response $response){
 				 ,sv.cust_pcode
 				 ,sv.msv_no as msv_no2
 				 ,sv.msv_status
+				 ,sv.contract_no
 				 ,(select status_desc from ".DB.".cen_status where sv.msv_status=status_id) as msv_status_desc
 				 ,(select k.kp_desc from ".DB.".cen_keeper k,".DB.".sv_trans t where k.kp_id=t.kp_id and t.sv_no=sv.sv_no and t.status_id=sv.status_id) as kp_desc
 				 ,(select kp_id from ".DB.".sv_trans where sv_no=sv.sv_no order by seq desc limit 1) as  kp_idx
