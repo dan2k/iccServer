@@ -1871,7 +1871,7 @@ function genToken($datax){
 	$tokenId = base64_encode(mcrypt_create_iv(32));
 	$issuedAt   = time();
 	$notBefore  = $issuedAt + 10;  //Adding 10 seconds
-	$expire     = $notBefore + ($issuedAt+(60*60*24)); // Adding  1 days
+	$expire     = $notBefore +(1*60*60*24); // Adding  1 days
 	$serverName = 'http://localhost/php-json/'; /// set your domain name 
 	$data = [
 		'iat'  => $issuedAt,         // Issued at: time when the token was generated
