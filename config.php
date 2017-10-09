@@ -19,7 +19,6 @@ function getDB() {
 	$dbConnection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 	return $dbConnection;
 }
-
 ?>
 <?php
 class DB{
@@ -37,7 +36,6 @@ class DB{
 	private $title="";
 	public function __construct(){
       //dsn for mysql
-		
 		$dsn = "mysql:host=".$this->host.";dbname=".$this->dbName;
 		$options = array(
 			PDO::ATTR_PERSISTENT    => true,

@@ -1800,6 +1800,7 @@ function login(Request $request, Response $response) {
 				a1.*
 				,a3.section_id 
 				,a2.cc
+				,a2.cust_pdesc
 			from 
 				cen_user a1,
 				cen_cust_place a2,
@@ -1818,24 +1819,31 @@ function login(Request $request, Response $response) {
 	if(count($userData)<1){
 		$arr=["status"=>false,"msg"=>"ไม่พบรายการในฐานข้อมูล"];
 	}else{
-		$userData=$userData[0];
-		$data=[
-				'user_id'=>($loginType==1?$userData['user_id']:$userData['emp_id']),
-				'user_title'=>($loginType==1?$userData['user_title']:$userData['emp_title']),
-				'user_fname'=>($loginType==1?$userData['user_fname']:$userData['emp_fname']),
-				'user_lname'=>($loginType==1?$userData['user_lname']:$userData['emp_lname']),
+		//$userData=$userData[0];
+		$data=[];
+		$i=0;
+		foreach($userData as $k=>$v){
+			$data[$i]=[
+				'user_id'=>($loginType==1?$v['user_id']:$v['emp_id']),
+				'user_title'=>($loginType==1?$v['user_title']:$v['emp_title']),
+				'user_fname'=>($loginType==1?$v['user_fname']:$v['emp_fname']),
+				'user_lname'=>($loginType==1?$v['user_lname']:$v['emp_lname']),
 				'user_type'=>$loginType,
-				'job_id'=>($loginType==1?$userData['job_id']:''),
-				'section_id'=>($loginType==1?$userData['section_id']:''),
-				'cc'=>($loginType==1?$userData['cc']:''),
-				'cust_ptype'=>($loginType==1?$userData['cust_ptype']:''),
-				'cust_pcode'=>($loginType==1?$userData['user_rcode']:''),
-				'place_type'=>($loginType==1?'':$userData['place_type']),
-				'place_code'=>($loginType==1?'':$userData['place_code']),
-				'dept_id'=>($loginType==1?'':$userData['dept_id']),
-				'sect_id'=>($loginType==1?'':$userData['sect_id']),
-				'jg_id'=>($loginType==1?'':$userData['jg_id'])
-		];
+				'job_id'=>($loginType==1?$v['job_id']:''),
+				'section_id'=>($loginType==1?$v['section_id']:''),
+				'cc'=>($loginType==1?$v['cc']:''),
+				'cust_ptype'=>($loginType==1?$v['cust_ptype']:''),
+				'cust_pcode'=>($loginType==1?$v['user_rcode']:''),
+				'cust_pdesc'=>($loginType==1?$v['cust_pdesc']:''),
+				'place_type'=>($loginType==1?'':$v['place_type']),
+				'place_code'=>($loginType==1?'':$v['place_code']),
+				'dept_id'=>($loginType==1?'':$v['dept_id']),
+				'sect_id'=>($loginType==1?'':$v['sect_id']),
+				'jg_id'=>($loginType==1?'':$v['jg_id'])
+			];
+			$i++;
+		}
+		
 		$token=genToken($data);
 		if($db->isOk()){
 			$arr=["status"=>true,"data"=>$token];
@@ -1888,7 +1896,7 @@ function genToken($datax){
 	 * https://tools.ietf.org/html/draft-ietf-jose-json-web-algorithms-40
 	 * for a list of spec-compliant algorithms.
 	 */ 
-	$key=genKey($datax['user_id']);
+	$key=genKey($datax[0]['user_id']);
 	$jwt = JWT::encode($data, $key);
 	return $jwt;
 	//$unencodedArray = ['jwt' => $jwt];
