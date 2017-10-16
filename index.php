@@ -592,7 +592,24 @@ function listRegist(Request $request, Response $response){
 		$fname=$data['fname'];
 		$lname=$data['lname'];
 		$params=[':fname'=>"'%$fname%'"];
-		$sql="select  * from ".DB.".cen_user where user_fname like  :fname   and user_lname like :lname";
+		$sql="	select  
+					u.*
+					,t.cust_desc
+					,p.cust_pdesc
+					,pv.province_name
+				from 
+					".DB.".cen_user u
+					,".DB.".cen_cust_place p
+					,".DB.".cen_type_custptype t
+					,".DB.".cen_province pv 
+				where 
+					u.user_fname like  :fname   
+					and u.user_lname like :lname
+					and u.cust_ptype=p.cust_ptype
+					and u.user_rcode=p.cust_pcode
+					and p.cc=pv.province_id
+					and u.cust_ptype=t.cust_ptype
+		";
 		$db=getDB();
 		$db->exec("set names utf8");
 		$stmt=$db->prepare($sql);
