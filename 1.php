@@ -57,6 +57,14 @@ try{
     //print_r($arr);
 }
  print_r($arr);
-
+ $i=0;
+ while($i<11){    
+     $i++;
+     if($i>5){
+         print_r($arr);
+         echo "<hr>";
+         
+     }
+ }
 
 ?>
